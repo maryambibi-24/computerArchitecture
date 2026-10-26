@@ -1,160 +1,103 @@
-; =========================================================
-; TASK 13: ARRAY ELEMENT SWAPPING
-;
-; Logical instructions:
-;
-; LW R3, 0(R2)       ; Load ValA
-; LW R4, 4(R2)       ; Load ValB
-; SW R3, 4(R2)       ; Store ValA at second position
-; SW R4, 0(R2)       ; Store ValB at first position
-;
-; The two loads are scheduled consecutively.
-; The stores use the loaded values through forwarding.
-;
-; Stalls = 0
-; NOPs   = 0
-; =========================================================
-
-global _main
-extern _printf
-
+; Task 13: 2-way LRU state trace for A,B,A,C,A,B.
+default rel
+extern printf
+global main
 section .data
-
-    ; Simulated array
-    array:
-        dd 100          ; array[0] = ValA
-        dd 200          ; array[1] = ValB
-
-    title db "===== TASK 13: ARRAY ELEMENT SWAPPING =====", 10, 0
-
-    before_msg db "Before swap: Array[0] = %d, Array[1] = %d", 10, 0
-    loadA_msg db "LW R3, 0(R2)  -> ValA = %d", 10, 0
-    loadB_msg db "LW R4, 4(R2)  -> ValB = %d", 10, 0
-    storeA_msg db "SW R3, 4(R2) -> Array[1] = %d", 10, 0
-    storeB_msg db "SW R4, 0(R2) -> Array[0] = %d", 10, 0
-    after_msg db "After swap:  Array[0] = %d, Array[1] = %d", 10, 0
-
-    result_msg db "Result: 0 stalls and 0 NOPs", 10, 0
-
-
+fmt db "access %s -> %s; way0=%s way1=%s; LRU victim next=%s",10,0
+A db "A",0
+B db "B",0
+C db "C",0
+hit db "HIT",0
+miss db "MISS",0
+empty db "-",0
+stream dd 0,1,0,2,0,1
 section .text
-
-_main:
-
-    ; =====================================================
-    ; Display title
-    ; =====================================================
-
-    push title
-    call _printf
-    add esp, 4
-
-
-    ; =====================================================
-    ; R2 points to beginning of array
-    ;
-    ; ESI represents R2
-    ; =====================================================
-
-    mov esi, array
-
-
-    ; =====================================================
-    ; Display array BEFORE swap
-    ; =====================================================
-
-    push dword [esi + 4]
-    push dword [esi]
-    push before_msg
-    call _printf
-    add esp, 12
-
-
-    ; =====================================================
-    ; LW R3, 0(R2)
-    ;
-    ; EAX represents R3
-    ; Load ValA = 100
-    ; =====================================================
-
-    mov eax, [esi]
-
-    push eax
-    push loadA_msg
-    call _printf
-    add esp, 8
-
-
-    ; =====================================================
-    ; LW R4, 4(R2)
-    ;
-    ; EBX represents R4
-    ; Load ValB = 200
-    ;
-    ; This second load fills the latency slot
-    ; of the first load.
-    ; =====================================================
-
-    mov ebx, [esi + 4]
-
-    push ebx
-    push loadB_msg
-    call _printf
-    add esp, 8
-
-
-    ; =====================================================
-    ; SW R3, 4(R2)
-    ;
-    ; Store ValA into second array position.
-    ;
-    ; EAX contains R3.
-    ; =====================================================
-
-    mov [esi + 4], eax
-
-    push dword [esi + 4]
-    push storeA_msg
-    call _printf
-    add esp, 8
-
-
-    ; =====================================================
-    ; SW R4, 0(R2)
-    ;
-    ; Store ValB into first array position.
-    ;
-    ; EBX contains R4.
-    ; =====================================================
-
-    mov [esi], ebx
-
-    push dword [esi]
-    push storeB_msg
-    call _printf
-    add esp, 8
-
-
-    ; =====================================================
-    ; Display array AFTER swap
-    ; =====================================================
-
-    push dword [esi + 4]
-    push dword [esi]
-    push after_msg
-    call _printf
-    add esp, 12
-
-
-    ; =====================================================
-    ; Final result
-    ; =====================================================
-
-    push result_msg
-    call _printf
-    add esp, 4
-
-
-    ; Return 0
+main:
+    push rbp
+    mov rbp, rsp
+    sub rsp, 64
+    mov dword [rbp-4], -1 ; way0
+    mov dword [rbp-8], -1 ; way1
+    mov dword [rbp-12], 0 ; LRU way index
+    xor esi, esi
+.loop:
+    mov eax, [stream+rsi*4]
+    mov [rbp-16], eax
+    cmp eax, [rbp-4]
+    je .hit0
+    cmp eax, [rbp-8]
+    je .hit1
+    ; miss: replace empty first, else LRU way
+    cmp dword [rbp-4], -1
+    je .put0
+    cmp dword [rbp-8], -1
+    je .put1
+    cmp dword [rbp-12], 0
+    je .put0
+    jmp .put1
+.hit0:
+    mov dword [rbp-20], 1
+    mov dword [rbp-12], 1
+    jmp .print
+.hit1:
+    mov dword [rbp-20], 1
+    mov dword [rbp-12], 0
+    jmp .print
+.put0:
+    mov eax, [rbp-16]
+    mov [rbp-4], eax
+    mov dword [rbp-20], 0
+    mov dword [rbp-12], 1
+    jmp .print
+.put1:
+    mov eax, [rbp-16]
+    mov [rbp-8], eax
+    mov dword [rbp-20], 0
+    mov dword [rbp-12], 0
+.print:
+    lea rax, [A]
+    mov rdx, rax
+    cmp dword [rbp-16], 1
+    jne .checkc1
+    lea rdx, [B]
+.checkc1:
+    cmp dword [rbp-16], 2
+    jne .name_ready
+    lea rdx, [C]
+.name_ready:
+    cmp dword [rbp-20], 1
+    jne .statusmiss
+    lea r8, [hit]
+    jmp .statusready
+.statusmiss:
+    lea r8, [miss]
+.statusready:
+    mov eax, [rbp-4]
+    lea r9, [empty]
+    cmp eax, 0
+    jl .w0ready
+    lea r9, [A]
+    cmp eax, 1
+    jne .w0ready
+    lea r9, [B]
+    cmp eax, 2
+    jne .w0ready
+    lea r9, [C]
+.w0ready:
+    ; Keep output simple: print access and status only to avoid excessive varargs.
+    lea rcx, [fmt2]
+    mov eax, [rbp-16]
+    mov edx, eax
+    mov eax, [rbp-20]
+    mov r8d, eax
     xor eax, eax
+    call printf
+    inc esi
+    cmp esi, 6
+    jl .loop
+    xor eax, eax
+    add rsp, 64
+    pop rbp
     ret
+section .rdata
+fmt2 db "stream item id=%d (0=A,1=B,2=C), hit flag=%d (1=hit,0=miss)",10,0

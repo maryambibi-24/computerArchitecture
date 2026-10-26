@@ -1,148 +1,46 @@
-; =========================================================
-; TASK 15: BRANCH STALL PENALTY CALCULATION
-;
-; Logical MIPS instruction:
-;
-; BEQ R1, R2, TARGET
-;
-; If R1 == R2, branch to TARGET.
-;
-; Conceptual pipeline:
-;
-; Branch resolved in EX:
-;     2 instructions are flushed
-;     Penalty = 2 cycles
-;
-; Branch resolved in ID:
-;     1 instruction is flushed
-;     Penalty = 1 cycle
-;
-; This NASM program demonstrates the branch condition
-; and displays the two possible penalties.
-; =========================================================
-
-global _main
-extern _printf
-
+; Task 15: 50,000 repeated stores vs dispersed stores.
+default rel
+extern printf
+global main
 section .data
-
-    title db "===== TASK 15: BRANCH STALL PENALTY =====", 10, 0
-
-    branch_msg db "BEQ R1, R2, TARGET", 10, 0
-
-    equal_msg db "R1 == R2: Branch condition is TRUE", 10, 0
-    target_msg db "Branch taken -> TARGET", 10, 0
-
-    ex_msg db "Branch resolved in EX: 2 instructions flushed", 10, 0
-    ex_penalty db "EX resolution penalty = 2 cycles", 10, 0
-
-    id_msg db "Branch resolved in ID: 1 instruction flushed", 10, 0
-    id_penalty db "ID resolution penalty = 1 cycle", 10, 0
-
-    finish_msg db "Control hazard demonstration complete.", 10, 0
-
-
+fmt db "Repeated stores: final=%d; dispersed stores: checksum=%d. Actual bus stalls need hardware counters.",10,0
+section .bss
+alignb 64
+hot resd 1
+cold resd 50000
 section .text
-
-_main:
-
-    ; =====================================================
-    ; Display title
-    ; =====================================================
-
-    push title
-    call _printf
-    add esp, 4
-
-    push branch_msg
-    call _printf
-    add esp, 4
-
-
-    ; =====================================================
-    ; Set logical registers
-    ;
-    ; R1 = EAX
-    ; R2 = EBX
-    ;
-    ; Make them equal so the branch is taken.
-    ; =====================================================
-
-    mov eax, 10          ; R1 = 10
-    mov ebx, 10          ; R2 = 10
-
-
-    ; =====================================================
-    ; BEQ R1, R2, TARGET
-    ;
-    ; Actual x86 equivalent:
-    ;
-    ; CMP R1, R2
-    ; JE  TARGET
-    ; =====================================================
-
-    cmp eax, ebx
-    je TARGET
-
-
-    ; =====================================================
-    ; These instructions would be on the sequential path.
-    ; If the branch is taken, they are conceptually
-    ; flushed from the pipeline.
-    ; =====================================================
-
-    push ex_msg
-    call _printf
-    add esp, 4
-
-    jmp FINISH
-
-
-TARGET:
-
-    ; =====================================================
-    ; Branch target
-    ; =====================================================
-
-    push equal_msg
-    call _printf
-    add esp, 4
-
-    push target_msg
-    call _printf
-    add esp, 4
-
-    ; -----------------------------------------------------
-    ; Branch penalty when resolved in EX
-    ; -----------------------------------------------------
-
-    push ex_msg
-    call _printf
-    add esp, 4
-
-    push ex_penalty
-    call _printf
-    add esp, 4
-
-    ; -----------------------------------------------------
-    ; Branch penalty when resolved in ID
-    ; -----------------------------------------------------
-
-    push id_msg
-    call _printf
-    add esp, 4
-
-    push id_penalty
-    call _printf
-    add esp, 4
-
-
-FINISH:
-
-    push finish_msg
-    call _printf
-    add esp, 4
-
-    ; Return 0
+main:
+    push rbp
+    mov rbp, rsp
+    xor ecx, ecx
+.repeat:
+    mov [hot], ecx
+    inc ecx
+    cmp ecx, 50000
+    jl .repeat
+    lea rdi, [cold]
+    xor ecx, ecx
+.dispersed:
+    mov [rdi+rcx*4], ecx
+    inc ecx
+    cmp ecx, 50000
+    jl .dispersed
+    mov edx, [hot]
+    xor r8d, r8d
+    xor ecx, ecx
+.sum:
+    add r8d, [rdi+rcx*4]
+    inc ecx
+    cmp ecx, 50000
+    jl .sum
+    lea rcx, [fmt]
+    ; format args: final and checksum
+    mov r9d, r8d
+    mov r8d, edx
+    ; printf has RCX fmt, RDX arg1, R8 arg2
+    mov edx, r8d
+    mov r8d, r9d
+    call printf
     xor eax, eax
+    pop rbp
     ret
